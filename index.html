@@ -575,7 +575,7 @@ function renderUI() {
 
 // ── ONEDRIVE DATA SOURCE ──────────────────────────────────────
 // 👇 PASTE YOUR ONEDRIVE SHARE URL HERE (see setup instructions)
-const ONEDRIVE_URL = 'https://ubcja-my.sharepoint.com/:x:/g/personal/ssnyder_ubcja_ca/IQDNhQktAsB7TIotw-qHVCngAetWZASxxgIuC_KY5IDFA50?e=tUOEMB';
+const ONEDRIVE_URL = 'https://ubcja-my.sharepoint.com/:x:/g/personal/ssnyder_ubcja_ca/IQDNhQktAsB7TIotw-qHVCngAQSYY5K0PH-eYcQeise1deY?e=QeUSg3';
 
 // How often to refresh data from OneDrive (milliseconds)
 const REFRESH_INTERVAL = 60000; // every 60 seconds
@@ -587,7 +587,7 @@ function setDataStatus(msg, colour = 'rgba(186,230,253,.5)') {
 
 // Convert a OneDrive share URL to a direct download URL
 function toDownloadUrl(shareUrl) {
-  if (shareUrl === 'https://ubcja-my.sharepoint.com/:x:/g/personal/ssnyder_ubcja_ca/IQDNhQktAsB7TIotw-qHVCngAetWZASxxgIuC_KY5IDFA50?e=tUOEMB') return null;
+  if (shareUrl === 'https://ubcja-my.sharepoint.com/:x:/g/personal/ssnyder_ubcja_ca/IQDNhQktAsB7TIotw-qHVCngAQSYY5K0PH-eYcQeise1deY?e=QeUSg3&download=1') return null;
   // OneDrive share links need to be converted to direct download links
   // Works for both personal OneDrive and OneDrive for Business (M365)
   try {

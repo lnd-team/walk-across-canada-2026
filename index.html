@@ -251,7 +251,7 @@ header{position:fixed;top:0;left:0;right:0;height:var(--header-h);
 
   <div class="sidebar" id="sidebar">
     <div class="sidebar-header">
-      <div class="section-title" style="padding:13px 13px 8px;">🏆 Team Standings</div>
+      <div class="section-title" id="standingsTitle" style="padding:13px 13px 8px;cursor:default;" onclick="handleSecretClick()">🏆 Team Standings</div>
     </div>
     <div class="tab-content active" id="tab-leaderboard" style="display:block;">
       <div class="leaderboard-list" id="leaderboardList"></div>
@@ -261,6 +261,21 @@ header{position:fixed;top:0;left:0;right:0;height:var(--header-h);
         <div style="font-size:10px;color:var(--mid);margin-top:2px;font-weight:700">steps across all teams</div>
       </div>
       <div id="dataStatus" style="margin-top:13px;padding-top:10px;border-top:1px solid rgba(255,255,255,.07);font-size:10px;font-weight:700;color:rgba(186,230,253,.5);">⏳ Loading data…</div>
+    </div>
+    <div class="tab-content" id="tab-admin" style="display:none;">
+      <div class="admin-section">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+          <h3 style="margin:0;">Update Steps</h3>
+          <button onclick="hideAdmin()" style="background:none;border:none;color:rgba(255,255,255,.4);cursor:pointer;font-size:18px;line-height:1;">✕</button>
+        </div>
+        <div class="input-group"><label>Team</label><select id="teamSelect"></select></div>
+        <div class="input-group">
+          <label>Cumulative Steps (total to date)</label>
+          <input type="number" id="stepsInput" placeholder="e.g. 85000" min="0"/>
+        </div>
+        <button class="btn btn-primary" onclick="updateTeamSteps()">✓ Update Steps</button>
+        <div id="saveStatus" style="font-size:11px;font-weight:800;margin-top:7px;transition:opacity 1s;opacity:0;">✅ Saved</div>
+      </div>
     </div>
   </div>
 </div>
@@ -621,8 +636,56 @@ async function loadFromJsonBin() {
   }
 }
 
-// ── ACTIONS ───────────────────────────────────────────────────
-function switchTab(id, btn) {
+// ── SECRET ADMIN ACCESS (triple-click "Team Standings") ───────
+let secretClicks = 0, secretTimer = null;
+function handleSecretClick() {
+  secretClicks++;
+  clearTimeout(secretTimer);
+  secretTimer = setTimeout(() => { secretClicks = 0; }, 600);
+  if (secretClicks >= 3) {
+    secretClicks = 0;
+    document.getElementById('tab-leaderboard').style.display = 'none';
+    document.getElementById('tab-admin').style.display = 'block';
+    renderAdminSelect();
+  }
+}
+function hideAdmin() {
+  document.getElementById('tab-admin').style.display = 'none';
+  document.getElementById('tab-leaderboard').style.display = 'block';
+}
+function renderAdminSelect() {
+  const sel = document.getElementById('teamSelect');
+  sel.innerHTML = teams.map((t,i) => `<option value="${i}">${t.name} (${fmtNum(t.steps)} steps)</option>`).join('');
+}
+
+// ── ADMIN ACTIONS ─────────────────────────────────────────────
+async function updateTeamSteps() {
+  const idx   = parseInt(document.getElementById('teamSelect').value);
+  const steps = parseInt(document.getElementById('stepsInput').value);
+  if (isNaN(steps) || steps < 0) { showToast('Enter a valid number'); return; }
+  const prev = totalSteps();
+  teams[idx].steps = steps;
+  renderUI();
+  renderAdminSelect();
+  document.getElementById('stepsInput').value = '';
+  checkMilestones(prev, totalSteps());
+  // Save to JSONBin
+  const ss = document.getElementById('saveStatus');
+  ss.textContent = '⏳ Saving…'; ss.style.opacity = '1'; ss.style.color = 'rgba(56,189,248,.8)';
+  try {
+    const res = await fetch(JSONBIN_URL, {
+      method: 'PUT', headers: JSONBIN_HEADERS, body: JSON.stringify({ teams }),
+    });
+    if (!res.ok) throw new Error(res.status);
+    ss.textContent = '✅ Saved'; ss.style.color = 'rgba(14,165,160,.9)';
+    setTimeout(() => { ss.style.opacity = '0'; }, 3000);
+    showToast(`✓ ${teams[idx].name}: ${fmtNum(steps)} steps`);
+  } catch(e) {
+    ss.textContent = '❌ Save failed'; ss.style.color = 'rgba(232,40,60,.8)';
+  }
+}
+
+
   document.querySelectorAll('.tab-content').forEach(e => e.classList.remove('active'));
   document.querySelectorAll('.tab-btn').forEach(e => e.classList.remove('active'));
   document.getElementById('tab-'+id).classList.add('active'); btn.classList.add('active');

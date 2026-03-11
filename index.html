@@ -599,7 +599,7 @@ function toDownloadUrl(shareUrl) {
 async function loadFromOneDrive() {
   const dlUrl = toDownloadUrl(ONEDRIVE_URL);
   if (!dlUrl) {
-    setDataStatus('');
+    setDataStatus('📴 Not connected — update ONEDRIVE_URL in the HTML', 'rgba(255,210,63,.7)');
     return;
   }
   setDataStatus('⏳ Loading…');

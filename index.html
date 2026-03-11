@@ -250,36 +250,17 @@ header{position:fixed;top:0;left:0;right:0;height:var(--header-h);
   </div>
 
   <div class="sidebar" id="sidebar">
-    <div class="sidebar-tab-bar">
-      <button class="tab-btn active" onclick="switchTab('leaderboard',this)">🏆 Teams</button>
-      <button class="tab-btn" onclick="switchTab('admin',this)">⚙️ Admin</button>
+    <div class="sidebar-header">
+      <div class="section-title" style="padding:13px 13px 8px;">🏆 Team Standings</div>
     </div>
-    <div class="tab-content active" id="tab-leaderboard">
-      <div class="section-title">Team Standings</div>
+    <div class="tab-content active" id="tab-leaderboard" style="display:block;">
       <div class="leaderboard-list" id="leaderboardList"></div>
       <div class="total-block">
         <div class="section-title">Combined Total</div>
         <div style="font-family:'Bebas Neue',sans-serif;font-size:28px;color:var(--sun);line-height:1" id="totalStepsDisplay">0</div>
         <div style="font-size:10px;color:var(--mid);margin-top:2px;font-weight:700">steps across all teams</div>
       </div>
-    </div>
-    <div class="tab-content" id="tab-admin">
-      <div class="admin-section">
-        <h3>Update Steps</h3>
-        <div class="input-group"><label>Team</label><select id="teamSelect"></select></div>
-        <div class="input-group">
-          <label>Cumulative Steps (total to date)</label>
-          <input type="number" id="stepsInput" placeholder="e.g. 85000" min="0"/>
-        </div>
-        <button class="btn btn-primary" onclick="updateTeamSteps()">✓ Update Steps</button>
-        <hr class="divider">
-        <h3>Add Team</h3>
-        <div class="input-group"><label>Team Name</label><input type="text" id="newTeamName" placeholder="e.g. Health & Safety"/></div>
-        <button class="btn btn-secondary" onclick="addTeam()">+ Add Team</button>
-        <hr class="divider">
-        <div class="section-title">Manage Teams</div>
-        <div id="teamEditList"></div>
-      </div>
+      <div id="dataStatus" style="margin-top:13px;padding-top:10px;border-top:1px solid rgba(255,255,255,.07);font-size:10px;font-weight:700;color:rgba(186,230,253,.5);">⏳ Loading data…</div>
     </div>
   </div>
 </div>
@@ -589,34 +570,122 @@ function renderUI() {
     </div>
   `).join('');
 
-  const sel = document.getElementById('teamSelect'), cur = sel.value;
-  sel.innerHTML = teams.map((t,i) => `<option value="${i}">${t.name} (${fmtNum(t.steps)} steps)</option>`).join('');
-  if (cur) sel.value = cur;
-
-  document.getElementById('teamEditList').innerHTML = teams.map((t,i) => `
-    <div class="team-edit-item">
-      <span>${t.name}</span>
-      <button class="btn btn-danger" onclick="removeTeam(${i})">✕</button>
-    </div>
-  `).join('');
-
   if (mapBuilt) updateMapProgress();
 }
 
-// ── ACTIONS ───────────────────────────────────────────────────
-function updateTeamSteps() {
-  const idx   = parseInt(document.getElementById('teamSelect').value);
-  const steps = parseInt(document.getElementById('stepsInput').value);
-  if (isNaN(steps) || steps < 0) { showToast('Enter a valid number'); return; }
-  const prev = totalSteps();
-  teams[idx].steps = steps; renderUI();
-  showToast(`✓ ${teams[idx].name}: ${fmtNum(steps)} steps`);
-  document.getElementById('stepsInput').value = '';
-  checkMilestones(prev, totalSteps());
+// ── ONEDRIVE DATA SOURCE ──────────────────────────────────────
+// 👇 PASTE YOUR ONEDRIVE SHARE URL HERE (see setup instructions)
+const ONEDRIVE_URL = 'https://ubcja-my.sharepoint.com/:x:/g/personal/ssnyder_ubcja_ca/IQDNhQktAsB7TIotw-qHVCngAetWZASxxgIuC_KY5IDFA50?e=tUOEMB';
+
+// How often to refresh data from OneDrive (milliseconds)
+const REFRESH_INTERVAL = 60000; // every 60 seconds
+
+function setDataStatus(msg, colour = 'rgba(186,230,253,.5)') {
+  const el = document.getElementById('dataStatus');
+  if (el) { el.textContent = msg; el.style.color = colour; }
 }
 
-function checkMilestones(prev, next) {
-  const pk = stepsToKm(prev), nk = stepsToKm(next);
+// Convert a OneDrive share URL to a direct download URL
+function toDownloadUrl(shareUrl) {
+  if (shareUrl === 'https://ubcja-my.sharepoint.com/:x:/g/personal/ssnyder_ubcja_ca/IQDNhQktAsB7TIotw-qHVCngAetWZASxxgIuC_KY5IDFA50?e=tUOEMB') return null;
+  // OneDrive share links need to be converted to direct download links
+  // Works for both personal OneDrive and OneDrive for Business (M365)
+  try {
+    const b64 = btoa(shareUrl).replace(/=/g,'').replace(/\+/g,'-').replace(/\//g,'_');
+    return `https://api.onedrive.com/v1.0/shares/u!${b64}/root/content`;
+  } catch(e) { return null; }
+}
+
+async function loadFromOneDrive() {
+  const dlUrl = toDownloadUrl(ONEDRIVE_URL);
+  if (!dlUrl) {
+    setDataStatus('📴 Not connected — update ONEDRIVE_URL in the HTML', 'rgba(255,210,63,.7)');
+    return;
+  }
+  setDataStatus('⏳ Loading…');
+  try {
+    const res = await fetch(dlUrl);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const buf = await res.arrayBuffer();
+    parseExcel(buf);
+    const now = new Date().toLocaleTimeString('en-CA', {hour:'2-digit', minute:'2-digit'});
+    setDataStatus(`✅ Updated at ${now}`, 'rgba(14,165,160,.9)');
+  } catch(e) {
+    console.error('OneDrive load failed:', e);
+    setDataStatus('❌ Could not load data — check URL', 'rgba(232,40,60,.8)');
+  }
+}
+
+function parseExcel(buffer) {
+  // Parse xlsx manually — read the shared strings and sheet data
+  // We use a lightweight approach: find team names and step values by position
+  // Teams are in column B (rows 6-15), steps in column C (rows 6-15)
+  try {
+    const uint8 = new Uint8Array(buffer);
+    const text = new TextDecoder('utf-8', {fatal:false}).decode(uint8);
+
+    // Extract ZIP entries (xlsx is a zip)
+    // Use a simple approach: look for the worksheet XML inside the binary
+    const xmlStart = text.indexOf('<worksheet');
+    const xmlEnd   = text.lastIndexOf('</worksheet>');
+    if (xmlStart === -1) throw new Error('No worksheet found');
+    const xml = text.slice(xmlStart, xmlEnd + 12);
+
+    // Parse cell values — find rows 6-15, columns B (steps) and C
+    const rowMatches = [...xml.matchAll(/<row[^>]*r="(\d+)"[^>]*>([\s\S]*?)<\/row>/g)];
+    const sharedStrings = extractSharedStrings(text);
+
+    const newTeams = [];
+    for (const [, rowNum, rowContent] of rowMatches) {
+      const r = parseInt(rowNum);
+      if (r < 6 || r > 15) continue;
+
+      // Column B = team name, Column C = steps
+      const nameCell  = rowContent.match(/<c r="B\d+"[^>]*t="s"[^>]*><v>(\d+)<\/v>/);
+      const stepsCell = rowContent.match(/<c r="C\d+"[^>]*><v>([\d.]+)<\/v>/);
+
+      if (nameCell && stepsCell) {
+        const name  = sharedStrings[parseInt(nameCell[1])] || `Team ${r-5}`;
+        const steps = Math.round(parseFloat(stepsCell[1]));
+        newTeams.push({ name, steps });
+      } else if (nameCell) {
+        const name = sharedStrings[parseInt(nameCell[1])] || `Team ${r-5}`;
+        newTeams.push({ name, steps: 0 });
+      }
+    }
+
+    if (newTeams.length > 0) {
+      teams = newTeams;
+      renderUI();
+    }
+  } catch(e) {
+    console.error('Excel parse error:', e);
+    // Keep existing team data if parse fails
+  }
+}
+
+function extractSharedStrings(text) {
+  const start = text.indexOf('<sst ');
+  const end   = text.indexOf('</sst>');
+  if (start === -1) return [];
+  const sst = text.slice(start, end + 6);
+  const strings = [];
+  const matches = sst.matchAll(/<t[^>]*>([^<]*)<\/t>/g);
+  for (const [, val] of matches) strings.push(val);
+  return strings;
+}
+
+// ── ACTIONS (read-only — no admin needed) ──────────────────────
+function switchTab(id, btn) {
+  document.querySelectorAll('.tab-content').forEach(e => e.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(e => e.classList.remove('active'));
+  document.getElementById('tab-'+id).classList.add('active'); btn.classList.add('active');
+}
+
+function toggleSidebar() { document.getElementById('sidebar').classList.toggle('collapsed'); }
+
+function checkMilestones(prevTotal, newTotal) {
+  const pk = stepsToKm(prevTotal), nk = stepsToKm(newTotal);
   CITIES.forEach(c => { if (c.km > 0 && pk < c.km && nk >= c.km) { celebrate(); setTimeout(() => showToast(`🎉 Milestone: ${c.name}!`), 300); }});
 }
 
@@ -630,24 +699,6 @@ function celebrate() {
     }, i*35);
   }
 }
-
-function addTeam() {
-  const name = document.getElementById('newTeamName').value.trim();
-  if (!name) { showToast('Enter a team name'); return; }
-  if (teams.find(t => t.name.toLowerCase() === name.toLowerCase())) { showToast('Team already exists'); return; }
-  teams.push({name, steps:0}); document.getElementById('newTeamName').value = '';
-  renderUI(); showToast(`✓ "${name}" added`);
-}
-
-function removeTeam(idx) { const n=teams[idx].name; teams.splice(idx,1); renderUI(); showToast(`"${n}" removed`); }
-
-function switchTab(id, btn) {
-  document.querySelectorAll('.tab-content').forEach(e => e.classList.remove('active'));
-  document.querySelectorAll('.tab-btn').forEach(e => e.classList.remove('active'));
-  document.getElementById('tab-'+id).classList.add('active'); btn.classList.add('active');
-}
-
-function toggleSidebar() { document.getElementById('sidebar').classList.toggle('collapsed'); }
 
 // ── RESIZE REDRAW ─────────────────────────────────────────────
 let redrawTimer = null;
@@ -665,8 +716,16 @@ const ro = new ResizeObserver(() => {
 window.addEventListener('load', async () => {
   renderUI();
   ro.observe(document.getElementById('mapContainer'));
+  // Load from OneDrive, then build map
+  await loadFromOneDrive();
   await initMap();
   renderUI();
+  // Auto-refresh every 60 seconds
+  setInterval(async () => {
+    const prevTotal = totalSteps();
+    await loadFromOneDrive();
+    checkMilestones(prevTotal, totalSteps());
+  }, REFRESH_INTERVAL);
 });
 </script>
 </body>

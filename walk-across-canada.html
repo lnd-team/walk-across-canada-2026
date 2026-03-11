@@ -272,7 +272,6 @@ header{position:fixed;top:0;left:0;right:0;height:var(--header-h);
           <input type="number" id="stepsInput" placeholder="e.g. 85000" min="0"/>
         </div>
         <button class="btn btn-primary" onclick="updateTeamSteps()">✓ Update Steps</button>
-        <div id="saveStatus" style="font-size:11px;font-weight:800;margin-top:7px;transition:opacity 1s;opacity:0;">✅ Saved</div>
         <hr class="divider">
         <h3>Add Team</h3>
         <div class="input-group"><label>Team Name</label><input type="text" id="newTeamName" placeholder="e.g. Health & Safety"/></div>
@@ -604,82 +603,16 @@ function renderUI() {
   if (mapBuilt) updateMapProgress();
 }
 
-// ── JSONBIN STORAGE ───────────────────────────────────────────
-// 👇 FILL THESE IN after completing the setup guide
-const JSONBIN_BIN_ID  = 'PASTE_YOUR_BIN_ID_HERE';
-const JSONBIN_API_KEY = 'PASTE_YOUR_API_KEY_HERE';
-
-const JSONBIN_URL     = `https://api.jsonbin.io/v3/b/${JSONBIN_BIN_ID}`;
-const JSONBIN_HEADERS = {
-  'Content-Type': 'application/json',
-  'X-Master-Key': JSONBIN_API_KEY,
-  'X-Bin-Versioning': 'false',   // always overwrite, don't stack versions
-};
-
-let isSaving = false;
-
-function setSaveStatus(state) {
-  // state: 'saving' | 'saved' | 'error' | 'offline'
-  const el = document.getElementById('saveStatus');
-  const icons = { saving:'⏳', saved:'✅', error:'❌', offline:'📴' };
-  const labels = { saving:'Saving…', saved:'Saved', error:'Save failed', offline:'Offline mode' };
-  const colours = { saving:'rgba(56,189,248,.8)', saved:'rgba(14,165,160,.9)', error:'rgba(232,40,60,.8)', offline:'rgba(255,210,63,.7)' };
-  el.textContent = `${icons[state]} ${labels[state]}`;
-  el.style.color = colours[state];
-  el.style.opacity = '1';
-  if (state === 'saved') setTimeout(() => { el.style.opacity = '0'; }, 3000);
-}
-
-async function saveToJsonBin() {
-  if (JSONBIN_BIN_ID === 'PASTE_YOUR_BIN_ID_HERE') {
-    setSaveStatus('offline'); return; // not configured yet — run locally fine
-  }
-  if (isSaving) return;
-  isSaving = true;
-  setSaveStatus('saving');
-  try {
-    const res = await fetch(JSONBIN_URL, {
-      method: 'PUT',
-      headers: JSONBIN_HEADERS,
-      body: JSON.stringify({ teams }),
-    });
-    if (!res.ok) throw new Error(res.status);
-    setSaveStatus('saved');
-  } catch(e) {
-    console.error('JSONBin save failed:', e);
-    setSaveStatus('error');
-  } finally { isSaving = false; }
-}
-
-async function loadFromJsonBin() {
-  if (JSONBIN_BIN_ID === 'PASTE_YOUR_BIN_ID_HERE') {
-    setSaveStatus('offline'); return;
-  }
-  try {
-    const res = await fetch(JSONBIN_URL + '/latest', { headers: JSONBIN_HEADERS });
-    if (!res.ok) throw new Error(res.status);
-    const data = await res.json();
-    if (data.record?.teams?.length) {
-      teams = data.record.teams;
-    }
-  } catch(e) {
-    console.error('JSONBin load failed:', e);
-    setSaveStatus('error');
-  }
-}
-
 // ── ACTIONS ───────────────────────────────────────────────────
-async function updateTeamSteps() {
+function updateTeamSteps() {
   const idx   = parseInt(document.getElementById('teamSelect').value);
   const steps = parseInt(document.getElementById('stepsInput').value);
   if (isNaN(steps) || steps < 0) { showToast('Enter a valid number'); return; }
   const prev = totalSteps();
-  teams[idx].steps = steps;
-  renderUI();
+  teams[idx].steps = steps; renderUI();
   showToast(`✓ ${teams[idx].name}: ${fmtNum(steps)} steps`);
   document.getElementById('stepsInput').value = '';
   checkMilestones(prev, totalSteps());
-  await saveToJsonBin();
 }
 
 function checkMilestones(prev, next) {
@@ -698,21 +631,15 @@ function celebrate() {
   }
 }
 
-async function addTeam() {
+function addTeam() {
   const name = document.getElementById('newTeamName').value.trim();
   if (!name) { showToast('Enter a team name'); return; }
   if (teams.find(t => t.name.toLowerCase() === name.toLowerCase())) { showToast('Team already exists'); return; }
-  teams.push({name, steps:0});
-  document.getElementById('newTeamName').value = '';
+  teams.push({name, steps:0}); document.getElementById('newTeamName').value = '';
   renderUI(); showToast(`✓ "${name}" added`);
-  await saveToJsonBin();
 }
 
-async function removeTeam(idx) {
-  const n = teams[idx].name; teams.splice(idx,1);
-  renderUI(); showToast(`"${n}" removed`);
-  await saveToJsonBin();
-}
+function removeTeam(idx) { const n=teams[idx].name; teams.splice(idx,1); renderUI(); showToast(`"${n}" removed`); }
 
 function switchTab(id, btn) {
   document.querySelectorAll('.tab-content').forEach(e => e.classList.remove('active'));
@@ -738,9 +665,6 @@ const ro = new ResizeObserver(() => {
 window.addEventListener('load', async () => {
   renderUI();
   ro.observe(document.getElementById('mapContainer'));
-  // Load saved data first, then build map
-  await loadFromJsonBin();
-  renderUI();
   await initMap();
   renderUI();
 });

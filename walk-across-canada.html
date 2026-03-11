@@ -1,0 +1,749 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Walk Across Canada – April Movement Challenge</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/topojson/3.0.2/topojson.min.js"></script>
+<style>
+:root{
+  --red:#E8283C;--maple:#FF6B35;--sun:#FFD23F;
+  --teal:#0EA5A0;--sky:#38BDF8;--navy:#0F2A4A;
+  --white:#FFFFFF;--mid:#BAE6FD;
+  --sidebar-w:290px;
+  --header-h:64px;
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+html,body{height:100%;font-family:'Nunito',sans-serif;background:var(--navy);color:var(--white);overflow:hidden;}
+body::before{content:'';position:fixed;inset:0;
+  background:radial-gradient(ellipse 80% 50% at 20% -10%,rgba(56,189,248,.18) 0%,transparent 60%),
+             radial-gradient(ellipse 60% 40% at 80% 110%,rgba(14,165,160,.15) 0%,transparent 60%);
+  pointer-events:none;z-index:0;}
+
+/* HEADER */
+header{position:fixed;top:0;left:0;right:0;height:var(--header-h);
+  background:linear-gradient(135deg,#0c2240,#0f3460);border-bottom:4px solid var(--red);
+  padding:0 18px;display:flex;align-items:center;justify-content:space-between;
+  gap:10px;box-shadow:0 4px 30px rgba(0,0,0,.4);z-index:100;}
+.header-brand{display:flex;align-items:center;gap:10px;flex-shrink:0;}
+.maple-icon{font-size:30px;filter:drop-shadow(0 0 10px rgba(232,40,60,.6));animation:sway 4s ease-in-out infinite;}
+@keyframes sway{0%,100%{transform:rotate(-4deg)}50%{transform:rotate(4deg)}}
+.header-left h1{font-family:'Bebas Neue',sans-serif;font-size:clamp(18px,2.8vw,36px);letter-spacing:3px;line-height:1;}
+.header-left h1 span{color:var(--red);}
+.header-left p{color:var(--mid);font-size:10px;font-weight:800;letter-spacing:2px;text-transform:uppercase;margin-top:2px;}
+.header-stats{display:flex;gap:8px;}
+.stat-pill{background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.15);border-radius:12px;padding:5px 13px;text-align:center;white-space:nowrap;}
+.stat-pill .num{font-family:'Bebas Neue',sans-serif;font-size:19px;color:var(--sun);line-height:1;}
+.stat-pill .lbl{font-size:9px;color:var(--mid);text-transform:uppercase;letter-spacing:1px;font-weight:700;}
+.sidebar-toggle{display:none;background:rgba(56,189,248,.15);border:1px solid rgba(56,189,248,.3);
+  color:var(--sky);border-radius:8px;padding:6px 10px;cursor:pointer;
+  font-family:'Nunito',sans-serif;font-size:12px;font-weight:800;white-space:nowrap;}
+
+/* BODY LAYOUT */
+.app{position:fixed;top:var(--header-h);left:0;right:0;bottom:0;display:flex;z-index:1;}
+
+/* MAP PANEL */
+.map-panel{flex:1;min-width:0;display:flex;flex-direction:column;padding:12px 10px 10px 14px;gap:10px;overflow:hidden;}
+
+/* PROGRESS BANNER */
+.progress-banner{flex-shrink:0;
+  background:linear-gradient(135deg,rgba(232,40,60,.14),rgba(255,210,63,.07));
+  border:1.5px solid rgba(255,210,63,.32);border-radius:12px;padding:9px 16px;
+  display:flex;align-items:center;justify-content:space-between;gap:10px;}
+.progress-text{font-family:'Bebas Neue',sans-serif;font-size:clamp(12px,1.5vw,15px);letter-spacing:1.5px;color:var(--mid);white-space:nowrap;}
+.progress-text span{color:var(--sun);font-size:clamp(16px,2vw,22px);}
+.progress-bar-wrap{flex:1;min-width:80px;background:rgba(255,255,255,.1);border-radius:50px;height:13px;position:relative;}
+.progress-bar-fill{height:100%;border-radius:50px;background:linear-gradient(90deg,var(--maple),var(--red));
+  transition:width 1.4s cubic-bezier(.4,0,.2,1);position:relative;box-shadow:0 0 14px rgba(255,107,53,.5);}
+.progress-bar-fill::before{content:'🚶';position:absolute;left:-13px;top:50%;transform:translateY(-50%);font-size:17px;}
+
+/* MAP CONTAINER */
+.map-container{flex:1;min-height:0;
+  background:linear-gradient(160deg,#1a4a7a,#0d2f52 40%,#082040);
+  border-radius:16px;border:1.5px solid rgba(56,189,248,.22);
+  position:relative;overflow:hidden;box-shadow:0 8px 40px rgba(0,0,0,.5);}
+.map-container::before{content:'';position:absolute;inset:0;
+  background-image:linear-gradient(rgba(56,189,248,.04) 1px,transparent 1px),
+                   linear-gradient(90deg,rgba(56,189,248,.04) 1px,transparent 1px);
+  background-size:40px 40px;pointer-events:none;z-index:0;}
+#mapSvg{width:100%;height:100%;display:block;position:absolute;top:0;left:0;z-index:1;cursor:grab;}
+#mapSvg:active{cursor:grabbing;}
+
+/* ZOOM BUTTONS */
+.zoom-btns{position:absolute;top:12px;left:12px;display:flex;flex-direction:column;gap:4px;z-index:10;}
+.zoom-btn{width:30px;height:30px;background:rgba(8,22,42,.82);border:1px solid rgba(56,189,248,.3);
+  border-radius:7px;color:var(--sky);font-size:17px;font-weight:900;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;transition:all .15s;
+  backdrop-filter:blur(4px);line-height:1;font-family:'Nunito',sans-serif;}
+.zoom-btn:hover{background:rgba(56,189,248,.2);border-color:var(--sky);}
+.zoom-btn.reset{font-size:14px;}
+
+/* PAN HINT */
+.map-hint{position:absolute;bottom:10px;left:50%;transform:translateX(-50%);
+  background:rgba(8,22,42,.78);border:1px solid rgba(56,189,248,.2);
+  border-radius:20px;padding:4px 13px;font-size:10px;font-weight:700;
+  color:rgba(186,230,253,.65);pointer-events:none;z-index:10;white-space:nowrap;
+  backdrop-filter:blur(4px);animation:hintin 1s ease 1s both;}
+@keyframes hintin{from{opacity:0;transform:translateX(-50%) translateY(5px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
+
+/* TOOLTIP */
+.map-tooltip{position:absolute;background:rgba(8,22,42,.96);border:1.5px solid var(--sun);
+  border-radius:9px;padding:6px 11px;font-size:11px;pointer-events:none;opacity:0;
+  transition:opacity .2s;z-index:30;min-width:110px;backdrop-filter:blur(8px);}
+.map-tooltip.show{opacity:1;}
+.map-tooltip strong{color:var(--sun);font-size:12px;display:block;margin-bottom:2px;}
+
+/* LOADING */
+#mapLoading{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  flex-direction:column;gap:10px;background:rgba(8,22,42,.7);z-index:20;border-radius:16px;}
+#mapLoading .spinner{width:32px;height:32px;border:3px solid rgba(255,255,255,.1);
+  border-top-color:var(--sky);border-radius:50%;animation:spin .8s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* CHIPS */
+.chips-row{flex-shrink:0;}
+.section-title{font-size:9px;font-weight:800;letter-spacing:2px;text-transform:uppercase;color:var(--mid);margin-bottom:5px;}
+.milestones-scroll{display:flex;gap:5px;overflow-x:auto;padding-bottom:3px;scrollbar-width:thin;scrollbar-color:var(--red) transparent;}
+.milestone-chip{flex-shrink:0;background:rgba(255,255,255,.06);border:1.5px solid rgba(255,255,255,.1);
+  border-radius:50px;padding:3px 10px;font-size:10px;font-weight:700;
+  display:flex;align-items:center;gap:3px;color:rgba(255,255,255,.5);}
+.milestone-chip.reached{background:rgba(255,210,63,.13);border-color:var(--sun);color:var(--sun);}
+.milestone-chip.current{background:rgba(255,107,53,.17);border-color:var(--maple);color:var(--maple);
+  animation:cglow 2s ease-in-out infinite;}
+@keyframes cglow{0%,100%{box-shadow:0 0 0 0 rgba(255,107,53,.3)}50%{box-shadow:0 0 0 4px rgba(255,107,53,0)}}
+
+/* SIDEBAR */
+.sidebar{width:var(--sidebar-w);flex-shrink:0;background:rgba(0,0,0,.3);
+  border-left:1px solid rgba(255,255,255,.07);display:flex;flex-direction:column;
+  overflow:hidden;transition:width .3s ease,opacity .3s ease;}
+.sidebar.collapsed{width:0;opacity:0;pointer-events:none;}
+.sidebar-tab-bar{flex-shrink:0;display:flex;border-bottom:1px solid rgba(255,255,255,.07);}
+.tab-btn{flex:1;padding:11px 6px;background:none;border:none;color:rgba(255,255,255,.4);
+  font-family:'Nunito',sans-serif;font-size:10px;font-weight:800;text-transform:uppercase;
+  letter-spacing:1.5px;cursor:pointer;transition:all .2s;border-bottom:3px solid transparent;}
+.tab-btn.active{color:var(--sky);border-bottom-color:var(--sky);background:rgba(56,189,248,.05);}
+.tab-content{display:none;overflow-y:auto;padding:13px;flex:1;}
+.tab-content.active{display:block;}
+.leaderboard-list{display:flex;flex-direction:column;gap:5px;}
+.team-card{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.07);border-radius:10px;
+  padding:8px 10px;display:flex;align-items:center;gap:7px;transition:all .2s;}
+.team-card:hover{background:rgba(56,189,248,.07);border-color:rgba(56,189,248,.22);transform:translateX(2px);}
+.team-rank{font-family:'Bebas Neue',sans-serif;font-size:18px;color:rgba(255,255,255,.18);min-width:21px;text-align:center;}
+.team-rank.gold{color:#FFD700;text-shadow:0 0 8px rgba(255,215,0,.5);}
+.team-rank.silver{color:#C0C0C0;}.team-rank.bronze{color:#CD7F32;}
+.team-info{flex:1;min-width:0;}
+.team-name{font-weight:800;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.team-steps{font-size:10px;color:var(--mid);margin-top:1px;font-weight:600;}
+.team-bar-wrap{width:38px;background:rgba(255,255,255,.07);border-radius:4px;height:4px;overflow:hidden;}
+.team-bar{height:100%;background:linear-gradient(90deg,var(--teal),var(--sky));border-radius:4px;transition:width 1s;}
+.total-block{margin-top:11px;padding-top:10px;border-top:1px solid rgba(255,255,255,.07);}
+.admin-section h3{font-family:'Bebas Neue',sans-serif;font-size:15px;letter-spacing:2px;color:var(--sky);margin-bottom:10px;}
+.input-group{margin-bottom:9px;}
+.input-group label{display:block;font-size:9px;text-transform:uppercase;letter-spacing:1.5px;color:var(--mid);margin-bottom:3px;font-weight:800;}
+.input-group input,.input-group select{width:100%;background:rgba(255,255,255,.07);border:1.5px solid rgba(255,255,255,.11);
+  border-radius:8px;padding:7px 10px;color:var(--white);font-family:'Nunito',sans-serif;font-size:12px;font-weight:600;outline:none;transition:border-color .2s;}
+.input-group input:focus,.input-group select:focus{border-color:var(--sky);background:rgba(56,189,248,.07);}
+.input-group select option{background:#0F2A4A;}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:5px;padding:7px 13px;border-radius:8px;border:none;
+  font-family:'Nunito',sans-serif;font-size:12px;font-weight:800;cursor:pointer;transition:all .2s;width:100%;}
+.btn-primary{background:linear-gradient(135deg,var(--red),var(--maple));color:white;box-shadow:0 4px 12px rgba(232,40,60,.3);}
+.btn-primary:hover{transform:translateY(-1px);box-shadow:0 6px 18px rgba(232,40,60,.45);}
+.btn-secondary{background:rgba(56,189,248,.09);color:var(--sky);border:1.5px solid rgba(56,189,248,.28);margin-top:6px;}
+.btn-secondary:hover{background:rgba(56,189,248,.17);}
+.btn-danger{background:rgba(232,40,60,.1);color:#ff7070;border:1px solid rgba(232,40,60,.22);font-size:10px;padding:3px 8px;width:auto;}
+.btn-danger:hover{background:rgba(232,40,60,.22);}
+.divider{border:none;border-top:1px solid rgba(255,255,255,.07);margin:12px 0;}
+.team-edit-item{display:flex;align-items:center;justify-content:space-between;background:rgba(255,255,255,.04);
+  border-radius:7px;padding:5px 9px;font-size:11px;font-weight:700;margin-bottom:4px;}
+
+/* SVG city dots */
+.city-dot{cursor:pointer;}
+.city-dot circle.ring{fill:none;stroke-width:1.5;transition:all .4s;}
+.city-dot circle.dot{transition:all .4s;}
+.city-dot text{pointer-events:none;}
+.city-dot.reached circle.dot{fill:var(--sun);filter:drop-shadow(0 0 4px rgba(255,210,63,.8));}
+.city-dot.reached circle.ring{stroke:var(--sun);opacity:.9;}
+.city-dot.reached text{fill:#FFE47A;}
+.city-dot.current circle.dot{fill:var(--maple);animation:pdot 1.4s ease-in-out infinite;}
+.city-dot.current circle.ring{stroke:var(--maple);opacity:.9;animation:pring 1.4s ease-in-out infinite;}
+.city-dot.current text{fill:#FFA07A;}
+.city-dot.unreached circle.dot{fill:rgba(255,255,255,.22);}
+.city-dot.unreached circle.ring{stroke:rgba(255,255,255,.18);opacity:.5;}
+.city-dot.unreached text{fill:rgba(255,255,255,.45);}
+@keyframes pdot{0%,100%{r:5}50%{r:7.5}}
+@keyframes pring{0%,100%{opacity:.5}50%{opacity:1}}
+.walker-outer{animation:wring 2s ease-out infinite;}
+@keyframes wring{0%,100%{r:13;opacity:.25}50%{r:20;opacity:0}}
+
+/* TOAST & CONFETTI */
+.toast{position:fixed;bottom:16px;left:50%;transform:translateX(-50%) translateY(80px);
+  background:linear-gradient(135deg,var(--teal),#0c7a75);color:white;padding:9px 20px;
+  border-radius:50px;font-size:13px;font-weight:800;z-index:999;
+  transition:transform .4s cubic-bezier(.175,.885,.32,1.275);pointer-events:none;
+  box-shadow:0 6px 24px rgba(14,165,160,.5);}
+.toast.show{transform:translateX(-50%) translateY(0);}
+@keyframes cffall{0%{transform:translateY(0) rotate(0) scale(1);opacity:1}100%{transform:translateY(-150px) rotate(720deg) scale(.4);opacity:0}}
+.confetti-piece{position:fixed;width:9px;height:9px;border-radius:2px;pointer-events:none;animation:cffall 1.6s ease-out forwards;z-index:9999;}
+
+/* RESPONSIVE */
+@media(max-width:700px){
+  :root{--sidebar-w:100vw;}
+  .app{flex-direction:column;}
+  .sidebar{width:100%;height:55vh;border-left:none;border-top:1px solid rgba(255,255,255,.07);}
+  .sidebar.collapsed{width:100%;height:0;opacity:0;}
+  .sidebar-toggle{display:inline-flex;}
+  html,body{overflow:auto;}
+}
+@media(min-width:701px) and (max-width:1000px){:root{--sidebar-w:240px;}}
+::-webkit-scrollbar{width:4px;height:4px;}
+::-webkit-scrollbar-track{background:transparent;}
+::-webkit-scrollbar-thumb{background:rgba(56,189,248,.3);border-radius:2px;}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-brand">
+    <div class="maple-icon">🍁</div>
+    <div class="header-left">
+      <h1>Walk Across <span>Canada</span></h1>
+      <p>April Movement Challenge · UBCJA</p>
+    </div>
+  </div>
+  <div class="header-stats" id="headerStats"></div>
+  <button class="sidebar-toggle" onclick="toggleSidebar()">📊 Teams</button>
+</header>
+
+<div class="app">
+  <div class="map-panel">
+
+    <div class="progress-banner">
+      <div class="progress-text">St. John's → Victoria &nbsp;|&nbsp; <span id="progressPct">0%</span> complete</div>
+      <div class="progress-bar-wrap">
+        <div class="progress-bar-fill" id="progressFill" style="width:0%"></div>
+      </div>
+      <div class="progress-text"><span id="progressKm">0</span>&nbsp;/&nbsp;7,200 km</div>
+    </div>
+
+    <div class="map-container" id="mapContainer">
+      <div class="zoom-btns">
+        <button class="zoom-btn" onclick="zoomBy(1.35)" title="Zoom in">+</button>
+        <button class="zoom-btn" onclick="zoomBy(1/1.35)" title="Zoom out">−</button>
+        <button class="zoom-btn reset" onclick="zoomReset()" title="Reset view">⌂</button>
+      </div>
+      <div class="map-hint">🖱 Scroll to zoom · Drag to pan</div>
+      <div id="mapLoading">
+        <div class="spinner"></div>
+        <span style="font-size:12px;color:var(--mid);font-weight:700">Loading map…</span>
+      </div>
+      <div class="map-tooltip" id="tooltip"></div>
+      <svg id="mapSvg"></svg>
+    </div>
+
+    <div class="chips-row">
+      <div class="section-title">Route Progress — St. John's → Victoria</div>
+      <div class="milestones-scroll" id="milestonesScroll"></div>
+    </div>
+
+  </div>
+
+  <div class="sidebar" id="sidebar">
+    <div class="sidebar-tab-bar">
+      <button class="tab-btn active" onclick="switchTab('leaderboard',this)">🏆 Teams</button>
+      <button class="tab-btn" onclick="switchTab('admin',this)">⚙️ Admin</button>
+    </div>
+    <div class="tab-content active" id="tab-leaderboard">
+      <div class="section-title">Team Standings</div>
+      <div class="leaderboard-list" id="leaderboardList"></div>
+      <div class="total-block">
+        <div class="section-title">Combined Total</div>
+        <div style="font-family:'Bebas Neue',sans-serif;font-size:28px;color:var(--sun);line-height:1" id="totalStepsDisplay">0</div>
+        <div style="font-size:10px;color:var(--mid);margin-top:2px;font-weight:700">steps across all teams</div>
+      </div>
+    </div>
+    <div class="tab-content" id="tab-admin">
+      <div class="admin-section">
+        <h3>Update Steps</h3>
+        <div class="input-group"><label>Team</label><select id="teamSelect"></select></div>
+        <div class="input-group">
+          <label>Cumulative Steps (total to date)</label>
+          <input type="number" id="stepsInput" placeholder="e.g. 85000" min="0"/>
+        </div>
+        <button class="btn btn-primary" onclick="updateTeamSteps()">✓ Update Steps</button>
+        <div id="saveStatus" style="font-size:11px;font-weight:800;margin-top:7px;transition:opacity 1s;opacity:0;">✅ Saved</div>
+        <hr class="divider">
+        <h3>Add Team</h3>
+        <div class="input-group"><label>Team Name</label><input type="text" id="newTeamName" placeholder="e.g. Health & Safety"/></div>
+        <button class="btn btn-secondary" onclick="addTeam()">+ Add Team</button>
+        <hr class="divider">
+        <div class="section-title">Manage Teams</div>
+        <div id="teamEditList"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ── DATA ──────────────────────────────────────────────────────
+const CITIES = [
+  { name:"St. John's",  label:"St. John's 🚩", km:0,    lon:-52.73, lat:47.56 },
+  { name:"Halifax",     label:"Halifax",        km:1150, lon:-63.57, lat:44.65 },
+  { name:"Moncton",     label:"Moncton",        km:1480, lon:-64.80, lat:46.09 },
+  { name:"Québec City", label:"Québec City",    km:2050, lon:-71.21, lat:46.81 },
+  { name:"Montréal",    label:"Montréal",       km:2530, lon:-73.57, lat:45.50 },
+  { name:"Ottawa",      label:"Ottawa",         km:2830, lon:-75.70, lat:45.42 },
+  { name:"Toronto",     label:"Toronto",        km:3840, lon:-79.38, lat:43.65 },
+  { name:"Thunder Bay", label:"Thunder Bay",    km:4320, lon:-89.25, lat:48.38 },
+  { name:"Winnipeg",    label:"Winnipeg",       km:5020, lon:-97.14, lat:49.90 },
+  { name:"Regina",      label:"Regina",         km:5660, lon:-104.62,lat:50.45 },
+  { name:"Calgary",     label:"Calgary",        km:6230, lon:-114.07,lat:51.05 },
+  { name:"Vancouver",   label:"Vancouver",      km:7090, lon:-123.12,lat:49.25 },
+  { name:"Victoria",    label:"Victoria 🏁",    km:7200, lon:-123.37,lat:48.43 },
+];
+const TOTAL_KM = 7200, STEPS_PER_KM = 1300;
+
+let teams = [
+  {name:'Learning & Development',steps:0},{name:'Marketing',steps:0},
+  {name:'Member Engagement',steps:0},{name:'Grants & Initiatives',steps:0},
+  {name:'NCC',steps:0},{name:'Comms & Procurement',steps:0},
+  {name:'UBC Built Leadership',steps:0},{name:'Training UBC Built',steps:0},
+  {name:'Local 93',steps:0},{name:'Local 27',steps:0},
+];
+
+// ── STATE ─────────────────────────────────────────────────────
+let projection = null, cityPixels = [], canadaFeature = null, mapBuilt = false;
+let zoomBehaviour = null, mapG = null;
+
+// ── HELPERS ───────────────────────────────────────────────────
+const totalSteps = () => teams.reduce((s,t) => s+t.steps, 0);
+const stepsToKm  = s  => Math.min(TOTAL_KM, s / STEPS_PER_KM);
+const fmtNum     = n  => n.toLocaleString('en-CA');
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2800);
+}
+
+function interpolateRoute(pts, t) {
+  if (t <= 0) return pts[0];
+  if (t >= 1) return pts[pts.length-1];
+  let segs = [], tot = 0;
+  for (let i = 1; i < pts.length; i++) {
+    const d = Math.hypot(pts[i].x-pts[i-1].x, pts[i].y-pts[i-1].y);
+    segs.push(d); tot += d;
+  }
+  let target = t * tot, acc = 0;
+  for (let i = 0; i < segs.length; i++) {
+    if (acc + segs[i] >= target) {
+      const l = (target - acc) / segs[i];
+      return { x: pts[i].x + l*(pts[i+1].x-pts[i].x), y: pts[i].y + l*(pts[i+1].y-pts[i].y) };
+    }
+    acc += segs[i];
+  }
+  return pts[pts.length-1];
+}
+
+// ── ZOOM/PAN ──────────────────────────────────────────────────
+function setupZoom(svg) {
+  zoomBehaviour = d3.zoom()
+    .scaleExtent([0.4, 10])
+    .on('zoom', (event) => {
+      if (mapG) mapG.attr('transform', event.transform);
+    });
+  svg.call(zoomBehaviour);
+  // Prevent zoom from blocking tooltip
+  svg.on('dblclick.zoom', null);
+}
+
+function zoomBy(factor) {
+  d3.select('#mapSvg').transition().duration(300).call(zoomBehaviour.scaleBy, factor);
+}
+
+function zoomReset() {
+  d3.select('#mapSvg').transition().duration(400).call(zoomBehaviour.transform, d3.zoomIdentity);
+}
+
+// ── MAP FETCH ─────────────────────────────────────────────────
+async function fetchCanada() {
+  const urls = [
+    'https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json',
+    'https://unpkg.com/world-atlas@2/countries-110m.json',
+  ];
+  for (const url of urls) {
+    try {
+      const topo = await d3.json(url);
+      const feat = topojson.feature(topo, topo.objects.countries).features.find(f => +f.id === 124);
+      if (feat) return feat;
+    } catch(e) { console.warn('Map source failed:', url); }
+  }
+  return null;
+}
+
+// ── DRAW MAP ─────────────────────────────────────────────────
+function drawMap(W, H) {
+  const svg = d3.select('#mapSvg')
+    .attr('viewBox', `0 0 ${W} ${H}`)
+    .attr('width', W).attr('height', H);
+
+  svg.selectAll('*').remove();
+
+  // Projection — good version that shows full Canada
+  projection = d3.geoConicConformal()
+    .parallels([49, 77])
+    .rotate([96, 0])
+    .center([0, 62])
+    .scale(W * 0.95)
+    .translate([W * 0.46, H * 0.52]);
+
+  const path = d3.geoPath().projection(projection);
+
+  cityPixels = CITIES.map(c => {
+    const [x, y] = projection([c.lon, c.lat]);
+    return { ...c, x, y };
+  });
+
+  // Gradient def — stays outside the zoom group so the URL ref works
+  const defs = svg.append('defs');
+  const rg = defs.append('linearGradient')
+    .attr('id', 'routeGrad').attr('x1','100%').attr('y1','0').attr('x2','0%').attr('y2','0');
+  rg.append('stop').attr('offset','0%').attr('stop-color','#E8283C');
+  rg.append('stop').attr('offset','45%').attr('stop-color','#FF6B35');
+  rg.append('stop').attr('offset','100%').attr('stop-color','#FFD23F');
+
+  // ── ALL CONTENT in one zoomable <g> ──
+  mapG = svg.append('g').attr('id', 'mapG');
+
+  // Canada land
+  if (canadaFeature) {
+    mapG.append('path').datum(canadaFeature)
+      .attr('d', path)
+      .attr('fill','#2d7a3a').attr('stroke','#5cb85c')
+      .attr('stroke-width','0.8').attr('stroke-opacity','0.5');
+  } else {
+    mapG.append('text').attr('x', W/2).attr('y', H/2)
+      .attr('text-anchor','middle').attr('fill','rgba(255,255,255,.4)')
+      .attr('font-family','Nunito').attr('font-size','13')
+      .text('Requires internet connection to load map');
+  }
+
+  // Hudson Bay label
+  const [hbx, hby] = projection([-85, 60]);
+  mapG.append('text').attr('x', hbx).attr('y', hby)
+    .attr('text-anchor','middle').attr('fill','rgba(173,216,230,.4)')
+    .attr('font-family','Nunito').attr('font-size', Math.max(9, W*0.012))
+    .attr('font-weight','700').text('Hudson Bay');
+
+  // Province labels
+  [[-126,54,'BC'],[-115,55,'AB'],[-106,54,'SK'],[-98,54,'MB'],
+   [-86,50,'ON'],[-72,52,'QC'],[-66,46,'NB·NS'],
+   [-85,65,'NT'],[-96,65,'NU'],[-136,63,'YK'],
+  ].forEach(([lon,lat,lbl]) => {
+    const [px, py] = projection([lon, lat]);
+    if (px > 10 && px < W-10 && py > 10 && py < H-10)
+      mapG.append('text').attr('x', px).attr('y', py)
+        .attr('text-anchor','middle').attr('fill','rgba(255,255,255,.14)')
+        .attr('font-family','Nunito').attr('font-size', Math.max(8, W*0.011))
+        .attr('font-weight','900').attr('letter-spacing','1').text(lbl);
+  });
+
+  // Route — ghost dashes
+  const routeFeature = { type:'Feature', geometry:{ type:'LineString', coordinates: CITIES.map(c => [c.lon, c.lat]) }};
+  mapG.append('path').datum(routeFeature)
+    .attr('fill','none').attr('stroke','rgba(255,255,255,.11)')
+    .attr('stroke-width','2.5').attr('stroke-dasharray','6 5').attr('stroke-linecap','round')
+    .attr('d', path);
+
+  // Route — completed (animated)
+  const rp = mapG.append('path').attr('id','routeCompleted').datum(routeFeature)
+    .attr('fill','none').attr('stroke','url(#routeGrad)')
+    .attr('stroke-width','3.5').attr('stroke-linecap','round').attr('stroke-linejoin','round')
+    .attr('d', path);
+  const routeLen = rp.node().getTotalLength();
+  rp.attr('stroke-dasharray', routeLen)
+    .attr('stroke-dashoffset', routeLen)
+    .attr('data-len', routeLen);
+
+  // City dots
+  const fs = Math.max(7, Math.min(10, W * 0.012));
+  cityPixels.forEach((c, i) => {
+    const g = mapG.append('g').attr('class','city-dot unreached')
+      .attr('transform', `translate(${c.x},${c.y})`).attr('data-idx', i);
+    const r = (i === 0 || i === CITIES.length-1) ? 7 : 5;
+    g.append('circle').attr('class','ring').attr('r', r+5).attr('stroke-width', 1.5);
+    g.append('circle').attr('class','dot').attr('r', r).attr('stroke','white').attr('stroke-width', r > 5 ? 2 : 1.5);
+
+    const nearRight = c.x > W*0.72, nearLeft = c.x < W*0.18;
+    const nearTop   = c.y < H*0.28, nearBot  = c.y > H*0.75;
+    const anchor = nearRight ? 'end' : nearLeft ? 'start' : 'middle';
+    const ldx  = nearRight ? -(r+6) : nearLeft ? (r+6) : 0;
+    const ldy1 = nearTop ? (r+13) : nearBot ? -(r+13) : -(r+8);
+    const ldy2 = nearTop ? (r+22) : nearBot ? -(r+4)  : -(r+0);
+
+    g.append('text').attr('x', ldx).attr('y', ldy1).attr('text-anchor', anchor)
+      .attr('font-family','Nunito').attr('font-size', fs).attr('font-weight','900').text(c.label);
+    g.append('text').attr('x', ldx).attr('y', ldy2).attr('text-anchor', anchor)
+      .attr('font-size', fs-1.5).attr('fill','rgba(255,255,255,.35)').attr('font-family','Nunito')
+      .text(c.km === 0 ? 'Start' : `${c.km.toLocaleString('en-CA')} km`);
+
+    g.on('mouseenter', () => {
+      const km = stepsToKm(totalSteps());
+      const tt = document.getElementById('tooltip');
+      let tx = c.x+14, ty = c.y-38;
+      if (tx+160 > W) tx = c.x-170; if (ty < 4) ty = c.y+14;
+      tt.style.left = tx+'px'; tt.style.top = ty+'px';
+      tt.innerHTML = `<strong>${c.name}</strong>${c.km.toLocaleString('en-CA')} km from St. John's${km >= c.km ? '<br>✅ Reached!' : ''}`;
+      tt.classList.add('show');
+    });
+    g.on('mouseleave', () => document.getElementById('tooltip').classList.remove('show'));
+  });
+
+  // Walker
+  const wg = mapG.append('g').attr('id','walkerG')
+    .attr('transform', `translate(${cityPixels[0].x},${cityPixels[0].y})`);
+  wg.append('circle').attr('class','walker-outer').attr('r',13).attr('fill','rgba(232,40,60,.25)');
+  wg.append('circle').attr('r',10).attr('fill','#E8283C').attr('stroke','white').attr('stroke-width',2.5);
+  wg.append('text').attr('text-anchor','middle').attr('dy',6).attr('font-size',12).text('🚶');
+
+  // Wire up zoom AFTER drawing
+  setupZoom(svg);
+
+  document.getElementById('mapLoading').style.display = 'none';
+  updateMapProgress();
+}
+
+function getMapSize() {
+  const c = document.getElementById('mapContainer');
+  return { W: c.clientWidth || 600, H: c.clientHeight || 360 };
+}
+
+async function initMap() {
+  if (!canadaFeature) canadaFeature = await fetchCanada();
+  const { W, H } = getMapSize();
+  drawMap(W, H);
+  mapBuilt = true;
+}
+
+// ── PROGRESS UPDATE ───────────────────────────────────────────
+function updateMapProgress() {
+  const total = totalSteps(), km = stepsToKm(total);
+  const pct = Math.min(100, (km / TOTAL_KM) * 100);
+
+  const rp = document.getElementById('routeCompleted');
+  if (rp) {
+    const len = parseFloat(rp.getAttribute('data-len') || 1600);
+    rp.style.transition = 'stroke-dashoffset 1.5s ease';
+    rp.style.strokeDashoffset = len - (pct/100) * len;
+  }
+
+  if (cityPixels.length > 0) {
+    const wp = interpolateRoute(cityPixels, pct/100);
+    const wg = document.getElementById('walkerG');
+    if (wg) wg.setAttribute('transform', `translate(${wp.x},${wp.y})`);
+  }
+
+  document.querySelectorAll('.city-dot').forEach((el, i) => {
+    const c = CITIES[i];
+    el.classList.remove('reached','current','unreached');
+    if (km >= c.km) {
+      const nxt = i === CITIES.length-1 || km >= CITIES[i+1].km;
+      el.classList.add(nxt ? 'reached' : 'current');
+    } else el.classList.add('unreached');
+  });
+}
+
+// ── RENDER UI ─────────────────────────────────────────────────
+function renderUI() {
+  const total = totalSteps(), km = stepsToKm(total);
+  const pct = Math.min(100, (km / TOTAL_KM) * 100);
+
+  document.getElementById('headerStats').innerHTML = `
+    <div class="stat-pill"><div class="num">${fmtNum(total)}</div><div class="lbl">Total Steps</div></div>
+    <div class="stat-pill"><div class="num">${Math.round(km).toLocaleString('en-CA')}</div><div class="lbl">km Walked</div></div>
+    <div class="stat-pill"><div class="num">${teams.length}</div><div class="lbl">Teams</div></div>
+  `;
+  document.getElementById('progressPct').textContent = Math.round(pct)+'%';
+  document.getElementById('progressKm').textContent  = Math.round(km).toLocaleString('en-CA');
+  document.getElementById('progressFill').style.width = pct+'%';
+  document.getElementById('totalStepsDisplay').textContent = fmtNum(total);
+
+  document.getElementById('milestonesScroll').innerHTML = CITIES.map((c,i) => {
+    let cls='milestone-chip', icon='·';
+    if (km >= c.km) { const nxt=i===CITIES.length-1||km>=CITIES[i+1].km; cls+=nxt?' reached':' current'; icon=nxt?'✓':'📍'; }
+    return `<div class="${cls}">${icon} ${c.name}</div>`;
+  }).join('');
+
+  const sorted = [...teams].sort((a,b) => b.steps-a.steps);
+  const maxS = sorted[0]?.steps || 1, rc = ['gold','silver','bronze'];
+  document.getElementById('leaderboardList').innerHTML = sorted.map((t,i) => `
+    <div class="team-card">
+      <div class="team-rank ${rc[i]||''}">${i+1}</div>
+      <div class="team-info">
+        <div class="team-name">${t.name}</div>
+        <div class="team-steps">${fmtNum(t.steps)} steps · ${Math.round(t.steps/STEPS_PER_KM).toLocaleString()} km</div>
+      </div>
+      <div class="team-bar-wrap"><div class="team-bar" style="width:${maxS>0?(t.steps/maxS*100):0}%"></div></div>
+    </div>
+  `).join('');
+
+  const sel = document.getElementById('teamSelect'), cur = sel.value;
+  sel.innerHTML = teams.map((t,i) => `<option value="${i}">${t.name} (${fmtNum(t.steps)} steps)</option>`).join('');
+  if (cur) sel.value = cur;
+
+  document.getElementById('teamEditList').innerHTML = teams.map((t,i) => `
+    <div class="team-edit-item">
+      <span>${t.name}</span>
+      <button class="btn btn-danger" onclick="removeTeam(${i})">✕</button>
+    </div>
+  `).join('');
+
+  if (mapBuilt) updateMapProgress();
+}
+
+// ── JSONBIN STORAGE ───────────────────────────────────────────
+// 👇 FILL THESE IN after completing the setup guide
+const JSONBIN_BIN_ID  = 'PASTE_YOUR_BIN_ID_HERE';
+const JSONBIN_API_KEY = 'PASTE_YOUR_API_KEY_HERE';
+
+const JSONBIN_URL     = `https://api.jsonbin.io/v3/b/${JSONBIN_BIN_ID}`;
+const JSONBIN_HEADERS = {
+  'Content-Type': 'application/json',
+  'X-Master-Key': JSONBIN_API_KEY,
+  'X-Bin-Versioning': 'false',   // always overwrite, don't stack versions
+};
+
+let isSaving = false;
+
+function setSaveStatus(state) {
+  // state: 'saving' | 'saved' | 'error' | 'offline'
+  const el = document.getElementById('saveStatus');
+  const icons = { saving:'⏳', saved:'✅', error:'❌', offline:'📴' };
+  const labels = { saving:'Saving…', saved:'Saved', error:'Save failed', offline:'Offline mode' };
+  const colours = { saving:'rgba(56,189,248,.8)', saved:'rgba(14,165,160,.9)', error:'rgba(232,40,60,.8)', offline:'rgba(255,210,63,.7)' };
+  el.textContent = `${icons[state]} ${labels[state]}`;
+  el.style.color = colours[state];
+  el.style.opacity = '1';
+  if (state === 'saved') setTimeout(() => { el.style.opacity = '0'; }, 3000);
+}
+
+async function saveToJsonBin() {
+  if (JSONBIN_BIN_ID === 'PASTE_YOUR_BIN_ID_HERE') {
+    setSaveStatus('offline'); return; // not configured yet — run locally fine
+  }
+  if (isSaving) return;
+  isSaving = true;
+  setSaveStatus('saving');
+  try {
+    const res = await fetch(JSONBIN_URL, {
+      method: 'PUT',
+      headers: JSONBIN_HEADERS,
+      body: JSON.stringify({ teams }),
+    });
+    if (!res.ok) throw new Error(res.status);
+    setSaveStatus('saved');
+  } catch(e) {
+    console.error('JSONBin save failed:', e);
+    setSaveStatus('error');
+  } finally { isSaving = false; }
+}
+
+async function loadFromJsonBin() {
+  if (JSONBIN_BIN_ID === 'PASTE_YOUR_BIN_ID_HERE') {
+    setSaveStatus('offline'); return;
+  }
+  try {
+    const res = await fetch(JSONBIN_URL + '/latest', { headers: JSONBIN_HEADERS });
+    if (!res.ok) throw new Error(res.status);
+    const data = await res.json();
+    if (data.record?.teams?.length) {
+      teams = data.record.teams;
+    }
+  } catch(e) {
+    console.error('JSONBin load failed:', e);
+    setSaveStatus('error');
+  }
+}
+
+// ── ACTIONS ───────────────────────────────────────────────────
+async function updateTeamSteps() {
+  const idx   = parseInt(document.getElementById('teamSelect').value);
+  const steps = parseInt(document.getElementById('stepsInput').value);
+  if (isNaN(steps) || steps < 0) { showToast('Enter a valid number'); return; }
+  const prev = totalSteps();
+  teams[idx].steps = steps;
+  renderUI();
+  showToast(`✓ ${teams[idx].name}: ${fmtNum(steps)} steps`);
+  document.getElementById('stepsInput').value = '';
+  checkMilestones(prev, totalSteps());
+  await saveToJsonBin();
+}
+
+function checkMilestones(prev, next) {
+  const pk = stepsToKm(prev), nk = stepsToKm(next);
+  CITIES.forEach(c => { if (c.km > 0 && pk < c.km && nk >= c.km) { celebrate(); setTimeout(() => showToast(`🎉 Milestone: ${c.name}!`), 300); }});
+}
+
+function celebrate() {
+  const colors = ['#E8283C','#FF6B35','#FFD23F','#0EA5A0','#38BDF8','#fff'];
+  for (let i = 0; i < 30; i++) {
+    setTimeout(() => {
+      const el = document.createElement('div'); el.className = 'confetti-piece';
+      el.style.cssText = `left:${15+Math.random()*70}vw;bottom:${50+Math.random()*40}px;background:${colors[Math.floor(Math.random()*colors.length)]};border-radius:${Math.random()>.5?'50%':'2px'};animation-delay:${Math.random()*.6}s;`;
+      document.body.appendChild(el); setTimeout(() => el.remove(), 2200);
+    }, i*35);
+  }
+}
+
+async function addTeam() {
+  const name = document.getElementById('newTeamName').value.trim();
+  if (!name) { showToast('Enter a team name'); return; }
+  if (teams.find(t => t.name.toLowerCase() === name.toLowerCase())) { showToast('Team already exists'); return; }
+  teams.push({name, steps:0});
+  document.getElementById('newTeamName').value = '';
+  renderUI(); showToast(`✓ "${name}" added`);
+  await saveToJsonBin();
+}
+
+async function removeTeam(idx) {
+  const n = teams[idx].name; teams.splice(idx,1);
+  renderUI(); showToast(`"${n}" removed`);
+  await saveToJsonBin();
+}
+
+function switchTab(id, btn) {
+  document.querySelectorAll('.tab-content').forEach(e => e.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(e => e.classList.remove('active'));
+  document.getElementById('tab-'+id).classList.add('active'); btn.classList.add('active');
+}
+
+function toggleSidebar() { document.getElementById('sidebar').classList.toggle('collapsed'); }
+
+// ── RESIZE REDRAW ─────────────────────────────────────────────
+let redrawTimer = null;
+const ro = new ResizeObserver(() => {
+  clearTimeout(redrawTimer);
+  redrawTimer = setTimeout(() => {
+    if (!mapBuilt) return;
+    const { W, H } = getMapSize();
+    if (W > 10 && H > 10) drawMap(W, H);
+    renderUI();
+  }, 150);
+});
+
+// ── INIT ──────────────────────────────────────────────────────
+window.addEventListener('load', async () => {
+  renderUI();
+  ro.observe(document.getElementById('mapContainer'));
+  // Load saved data first, then build map
+  await loadFromJsonBin();
+  renderUI();
+  await initMap();
+  renderUI();
+});
+</script>
+</body>
+</html>

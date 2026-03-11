@@ -372,7 +372,11 @@ const WORLD_TOPO = JSON.parse(`{"type":"Topology","objects":{"countries":{"type"
 
 async function fetchCanada() {
   try {
-    const feat = topojson.feature(WORLD_TOPO, WORLD_TOPO.objects.countries).features.find(f => +f.id === 124);
+    console.log('fetchCanada: WORLD_TOPO type =', typeof WORLD_TOPO, WORLD_TOPO ? 'loaded' : 'NULL');
+    const countries = topojson.feature(WORLD_TOPO, WORLD_TOPO.objects.countries);
+    console.log('fetchCanada: countries features count =', countries.features.length);
+    const feat = countries.features.find(f => +f.id === 124);
+    console.log('fetchCanada: Canada feature =', feat ? 'FOUND' : 'NOT FOUND');
     if (feat) return feat;
   } catch(e) { console.warn('Map parse failed:', e); }
   return null;
@@ -516,10 +520,16 @@ function getMapSize() {
 }
 
 async function initMap() {
-  if (!canadaFeature) canadaFeature = await fetchCanada();
-  const { W, H } = getMapSize();
-  drawMap(W, H);
-  mapBuilt = true;
+  try {
+    if (!canadaFeature) canadaFeature = await fetchCanada();
+    const { W, H } = getMapSize();
+    drawMap(W, H);
+    mapBuilt = true;
+  } catch(e) {
+    console.error('Map init error:', e);
+    const ml = document.getElementById('mapLoading');
+    if (ml) ml.innerHTML = '<span style="font-size:11px;color:rgba(186,230,253,.5);padding:20px;display:block;text-align:center;">Map unavailable</span>';
+  }
 }
 
 // ── PROGRESS UPDATE ───────────────────────────────────────────
